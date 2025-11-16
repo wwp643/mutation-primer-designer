@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>氨基酸单点突变引物设计工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#10b981',
+                        accent: '#6366f1',
+                        neutral: '#64748b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .primer-card {
+                @apply bg-white rounded-lg shadow-md p-4 transition-all duration-300 hover:shadow-lg;
+            }
+            .input-field {
+                @apply w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary;
+            }
+            .btn-primary {
+                @apply bg-primary hover:bg-primary/90 text-white font-medium py-2 px-6 rounded-md transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50;
+            }
+            .btn-secondary {
+                @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-6 rounded-md transition-all duration-300;
+            }
+            /* 碱基高亮样式 */
+            .wildtype-base {
+                @apply text-red-600 font-bold;
+            }
+            .mutant-base {
+                @apply text-green-600 font-bold;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-6">
+            <h1 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold text-gray-800 flex items-center">
+                <i class="fa fa-dna text-primary mr-3"></i>
+                氨基酸单点突变引物设计工具
+            </h1>
+            <p class="text-gray-600 mt-2">快速设计单点突变实验所需的上下游引物。使用说明
+以下内容为相关序列信息，您可直接查看或使用；
+若需获取 fasta 格式文件，可直接复制全部序列内容；
+复制后，将内容粘贴到 Excel 中即可完成保存或进一步编辑。</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 输入区域 -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- 基因序列输入 -->
+                <div class="primer-card">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-file-text-o text-primary mr-2"></i>基因序列
+                    </h2>
+                    <div class="space-y-3">
+                        <label class="block text-sm font-medium text-gray-700">野生型基因序列 (5'→3')</label>
+                        <textarea id="wildtype-seq" class="input-field h-32" placeholder="输入完整的野生型基因序列（仅包含ATCG）"></textarea>
+                        <p class="text-xs text-gray-500">请输入不含空格和特殊字符的DNA序列，确保序列正确无误</p>
+                    </div>
+                </div>
+
+                <!-- 突变位点输入 -->
+                <div class="primer-card">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-list-alt text-primary mr-2"></i>突变位点
+                    </h2>
+                    <div class="space-y-3">
+                        <label class="block text-sm font-medium text-gray-700">突变位点列表</label>
+                        <textarea id="mutation-list" class="input-field h-40" placeholder="每行输入一个突变位点，格式：野生型氨基酸+位置+突变后氨基酸（如A10V）"></textarea>
+                        <p class="text-xs text-gray-500">示例：A10V 表示第10位氨基酸从A突变为V</p>
+                        
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="add-example" class="btn-secondary flex items-center justify-center">
+                                <i class="fa fa-plus-circle mr-1"></i> 添加示例
+                            </button>
+                            <button id="clear-input" class="btn-secondary flex items-center justify-center">
+                                <i class="fa fa-trash mr-1"></i> 清空输入
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 引物参数设置 -->
+                <div class="primer-card">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-sliders text-primary mr-2"></i>引物参数
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">引物长度范围</label>
+                            <div class="grid grid-cols-2 gap-3 mt-1">
+                                <div>
+                                    <label class="text-xs text-gray-500">最小长度 (bp)</label>
+                                    <input type="number" id="primer-min-length" value="18" min="15" max="30" class="input-field">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500">最大长度 (bp)</label>
+                                    <input type="number" id="primer-max-length" value="25" min="15" max="30" class="input-field">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">目标Tm值 (°C)</label>
+                            <input type="number" id="target-tm" value="60" min="50" max="70" step="0.5" class="input-field">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">GC含量范围 (%)</label>
+                            <div class="grid grid-cols-2 gap-3 mt-1">
+                                <div>
+                                    <label class="text-xs text-gray-500">最小值</label>
+                                    <input type="number" id="min-gc" value="40" min="30" max="60" class="input-field">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500">最大值</label>
+                                    <input type="number" id="max-gc" value="60" min="30" max="70" class="input-field">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button id="generate-primers" class="btn-primary w-full mt-2 flex items-center justify-center">
+                            <i class="fa fa-magic mr-2"></i> 生成引物
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 颜色说明 -->
+                <div class="primer-card">
+                    <div class="text-sm">
+                        <p class="font-medium mb-2">颜色说明：</p>
+                        <p><span class="wildtype-base">红色碱基</span>：野生型原始碱基</p>
+                        <p><span class="mutant-base">绿色碱基</span>：突变后的碱基</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 结果展示区域 -->
+            <div class="lg:col-span-2">
+                <div class="primer-card h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                            <i class="fa fa-table text-primary mr-2"></i>引物设计结果
+                        </h2>
+                        <div class="flex gap-2">
+                            <button id="export-excel" class="btn-secondary text-sm px-3 py-1 hidden">
+                                <i class="fa fa-download mr-1"></i> 导出Excel
+                            </button>
+                            <button id="export-fasta" class="btn-secondary text-sm px-3 py-1 hidden">
+                                <i class="fa fa-file-text mr-1"></i> FASTA格式
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="results-container" class="flex-1 overflow-auto">
+                        <div id="initial-message" class="h-64 flex flex-col items-center justify-center text-gray-500">
+                            <i class="fa fa-search text-4xl mb-3 opacity-30"></i>
+                            <p>请输入基因序列和突变位点，点击"生成引物"按钮开始分析</p>
+                        </div>
+                        
+                        <div id="loading-indicator" class="h-64 flex items-center justify-center hidden">
+                            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                            <p class="ml-3 text-gray-600">正在设计引物，请稍候...</p>
+                        </div>
+                        
+                        <div id="error-message" class="h-64 flex items-center justify-center text-red-500 hidden">
+                            <i class="fa fa-exclamation-triangle text-2xl mr-3"></i>
+                            <p id="error-text">输入数据有误，请检查后重试</p>
+                        </div>
+                        
+                        <div id="results-table" class="hidden overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">突变位点</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">上游引物 (5'→3')</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">下游引物 (5'→3')</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">上游Tm (°C)</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">上游GC (%)</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">备注</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="primers-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- 结果将动态插入到这里 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- 引物特性图表 -->
+                    <div id="primer-charts" class="mt-6 hidden">
+                        <h3 class="text-lg font-medium text-gray-800 mb-3">引物特性分析</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-gray-50 p-3 rounded-md">
+                                <canvas id="tm-chart" height="200"></canvas>
+                            </div>
+                            <div class="bg-gray-50 p-3 rounded-md">
+                                <canvas id="gc-chart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t mt-12">
+        <div class="container mx-auto px-4 py-6">
+            <div class="text-center text-gray-600 text-sm">
+                <p>氨基酸单点突变引物设计工具 &copy; 2023</p>
+                <p class="mt-1">引物设计结果仅供实验参考，建议进一步验证引物特异性</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // 密码子表 (常用密码子)
+        const codonTable = {
+            "A": "GCT", "V": "GTT", "L": "CTG", "I": "ATT", "M": "ATG",
+            "F": "TTT", "Y": "TAT", "W": "TGG", "S": "TCT", "P": "CCC",
+            "T": "ACT", "C": "TGT", "N": "AAT", "Q": "CAG", "D": "GAT",
+            "E": "GAA", "K": "AAA", "R": "CGT", "H": "CAT", "G": "GGT"
+        };
+
+        // 氨基酸简写验证
+        const validAminoAcids = new Set(["A", "V", "L", "I", "M", "F", "Y", "W", "S", "P", "T", "C", "N", "Q", "D", "E", "K", "R", "H", "G"]);
+
+        // DOM元素
+        const wildtypeSeqEl = document.getElementById('wildtype-seq');
+        const mutationListEl = document.getElementById('mutation-list');
+        const generateBtn = document.getElementById('generate-primers');
+        const addExampleBtn = document.getElementById('add-example');
+        const clearInputBtn = document.getElementById('clear-input');
+        const exportExcelBtn = document.getElementById('export-excel');
+        const exportFastaBtn = document.getElementById('export-fasta');
+        const resultsContainer = document.getElementById('results-container');
+        const initialMessage = document.getElementById('initial-message');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const resultsTable = document.getElementById('results-table');
+        const primersBody = document.getElementById('primers-body');
+        const primerCharts = document.getElementById('primer-charts');
+        
+        // 参数输入
+        const primerMinLengthEl = document.getElementById('primer-min-length');
+        const primerMaxLengthEl = document.getElementById('primer-max-length');
+        const targetTmEl = document.getElementById('target-tm');
+        const minGcEl = document.getElementById('min-gc');
+        const maxGcEl = document.getElementById('max-gc');
+
+        // 添加示例数据
+        addExampleBtn.addEventListener('click', () => {
+            wildtypeSeqEl.value = "ATGGCTGTTCTGATTATGTTC TAT TGG TCT CCC ACT TGT AAT CAG GAT GAA AAA CGT CAT GGT".replace(/\s/g, '');
+            
+            mutationListEl.value = [
+                "A2V",
+                "V3L",
+                "L4I",
+                "I5M",
+                "M6F"
+            ].join('\n');
+        });
+
+        // 清空输入
+        clearInputBtn.addEventListener('click', () => {
+            wildtypeSeqEl.value = '';
+            mutationListEl.value = '';
+        });
+
+        // 生成引物
+        generateBtn.addEventListener('click', () => {
+            // 显示加载状态
+            initialMessage.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            resultsTable.classList.add('hidden');
+            primerCharts.classList.add('hidden');
+            exportExcelBtn.classList.add('hidden');
+            exportFastaBtn.classList.add('hidden');
+            loadingIndicator.classList.remove('hidden');
+            
+            // 延迟处理以显示加载动画
+            setTimeout(() => {
+                try {
+                    const results = designPrimers();
+                    displayResults(results);
+                } catch (error) {
+                    showError(error.message);
+                }
+            }, 500);
+        });
+
+        // 设计引物的核心函数
+        function designPrimers() {
+            // 获取输入值
+            const wildtypeSeq = wildtypeSeqEl.value.trim().toUpperCase();
+            const mutationList = mutationListEl.value.trim().split('\n')
+                .filter(line => line.trim() !== '')
+                .map(line => line.trim());
+            
+            const primerMinLength = parseInt(primerMinLengthEl.value);
+            const primerMaxLength = parseInt(primerMaxLengthEl.value);
+            const targetTm = parseFloat(targetTmEl.value);
+            const minGc = parseInt(minGcEl.value);
+            const maxGc = parseInt(maxGcEl.value);
+
+            // 验证输入
+            if (!wildtypeSeq) {
+                throw new Error("请输入野生型基因序列");
+            }
+            
+            if (!/^[ATCG]+$/.test(wildtypeSeq)) {
+                throw new Error("基因序列只能包含A、T、C、G四种碱基");
+            }
+            
+            if (mutationList.length === 0) {
+                throw new Error("请输入至少一个突变位点");
+            }
+            
+            if (primerMinLength >= primerMaxLength) {
+                throw new Error("引物最小长度不能大于或等于最大长度");
+            }
+            
+            if (minGc >= maxGc) {
+                throw new Error("GC含量最小值不能大于或等于最大值");
+            }
+
+            // 解析突变位点
+            const mutations = [];
+            for (const mutation of mutationList) {
+                // 匹配格式：字母+数字+字母 (如A10V)
+                const match = mutation.match(/^([A-Z])(\d+)([A-Z])$/);
+                if (!match) {
+                    throw new Error(`突变位点格式错误: ${mutation}，正确格式应为如A10V`);
+                }
+                
+                const [, wtAa, positionStr, mutAa] = match;
+                const position = parseInt(positionStr);
+                
+                if (!validAminoAcids.has(wtAa) || !validAminoAcids.has(mutAa)) {
+                    throw new Error(`无效的氨基酸简写: ${mutation}`);
+                }
+                
+                // 检查位置是否有效 (密码子数量)
+                if (position < 1 || position > wildtypeSeq.length / 3) {
+                    throw new Error(`突变位置超出序列范围: ${mutation}，最大有效位置为${Math.floor(wildtypeSeq.length / 3)}`);
+                }
+                
+                mutations.push({
+                    wtAa,
+                    position,
+                    mutAa,
+                    display: mutation
+                });
+            }
+
+            // 设计引物
+            const results = [];
+            for (const mutation of mutations) {
+                // 计算密码子位置 (0-based)
+                const codonStart = (mutation.position - 1) * 3;
+                const codonEnd = codonStart + 3;
+                
+                // 获取野生型密码子
+                const wtCodon = wildtypeSeq.substring(codonStart, codonEnd);
+                
+                // 获取突变密码子
+                const mutCodon = codonTable[mutation.mutAa];
+                
+                // 计算引物长度 (取中间值)
+                const primerLength = Math.floor((primerMinLength + primerMaxLength) / 2);
+                
+                // 计算上下游引物的长度分配
+                const upstreamLength = Math.ceil(primerLength / 2);
+                const downstreamLength = Math.floor(primerLength / 2);
+                
+                // 生成上游引物 (包含突变位点)
+                const leftPart = wildtypeSeq.substring(
+                    Math.max(0, codonStart - upstreamLength), 
+                    codonStart
+                );
+                const rightPart = wildtypeSeq.substring(
+                    codonEnd, 
+                    codonEnd + downstreamLength
+                );
+                const forwardPrimer = leftPart + mutCodon + rightPart;
+                
+                // 生成下游引物 (反向互补)
+                const reversePrimer = reverseComplement(forwardPrimer);
+                
+                // 计算Tm值 (简化计算)
+                const gcCount = (forwardPrimer.match(/[GC]/g) || []).length;
+                const atCount = forwardPrimer.length - gcCount;
+                const tmValue = 4 * gcCount + 2 * atCount;
+                const gcContent = Math.round((gcCount / forwardPrimer.length) * 100);
+                
+                // 存储野生型密码子用于后续高亮对比
+                results.push({
+                    mutation: mutation.display,
+                    forwardPrimer,
+                    reversePrimer,
+                    tm: tmValue.toFixed(1),
+                    gc: gcContent,
+                    wtCodon,       // 野生型密码子
+                    mutCodon,      // 突变型密码子
+                    leftPartLength: leftPart.length  // 左侧序列长度，用于定位突变位置
+                });
+            }
+
+            return results;
+        }
+
+        // 显示结果（修改：将密码子说明移到GC后面作为备注）
+        function displayResults(results) {
+            loadingIndicator.classList.add('hidden');
+            resultsTable.classList.remove('hidden');
+            exportExcelBtn.classList.remove('hidden');
+            exportFastaBtn.classList.remove('hidden');
+            primerCharts.classList.remove('hidden');
+            
+            // 清空表格
+            primersBody.innerHTML = '';
+            
+            // 填充表格
+            results.forEach((primer, index) => {
+                const row = document.createElement('tr');
+                row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                
+                // 生成带颜色高亮的上游引物HTML
+                const leftPart = primer.forwardPrimer.substring(0, primer.leftPartLength);
+                const codonPart = primer.forwardPrimer.substring(primer.leftPartLength, primer.leftPartLength + 3);
+                const rightPart = primer.forwardPrimer.substring(primer.leftPartLength + 3);
+                
+                // 对比野生型和突变型密码子，标记差异碱基
+                let highlightedCodon = '';
+                for (let i = 0; i < 3; i++) {
+                    if (primer.wtCodon[i] !== codonPart[i]) {
+                        highlightedCodon += `<span class="mutant-base">${codonPart[i]}</span>`;
+                    } else {
+                        highlightedCodon += codonPart[i];
+                    }
+                }
+                
+                // 组合完整的上游引物HTML（包含高亮）
+                const highlightedForwardPrimer = `${leftPart}${highlightedCodon}${rightPart}`;
+                
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">${primer.mutation}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-900 font-mono break-all">${highlightedForwardPrimer}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-900 font-mono break-all">${primer.reversePrimer}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">${primer.tm}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">${primer.gc}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-600">
+                            野生型密码子: <span class="wildtype-base">${primer.wtCodon}</span> → 突变型密码子: <span class="mutant-base">${primer.mutCodon}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button class="text-primary hover:text-primary/80 copy-btn" data-target="forward-${index}">
+                            <i class="fa fa-copy mr-1"></i> 上游
+                        </button>
+                        <button class="text-primary hover:text-primary/80 copy-btn ml-2" data-target="reverse-${index}">
+                            <i class="fa fa-copy mr-1"></i> 下游
+                        </button>
+                        <input type="hidden" id="forward-${index}" value="${primer.forwardPrimer}">
+                        <input type="hidden" id="reverse-${index}" value="${primer.reversePrimer}">
+                        <input type="hidden" id="note-${index}" value="野生型密码子: ${primer.wtCodon} → 突变型密码子: ${primer.mutCodon}">
+                    </td>
+                `;
+                
+                primersBody.appendChild(row);
+            });
+            
+            // 添加复制功能
+            document.querySelectorAll('.copy-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const targetId = e.currentTarget.getAttribute('data-target');
+                    const text = document.getElementById(targetId).value;
+                    
+                    navigator.clipboard.writeText(text).then(() => {
+                        const originalText = e.currentTarget.innerHTML;
+                        e.currentTarget.innerHTML = '<i class="fa fa-check mr-1"></i> 已复制';
+                        e.currentTarget.classList.add('text-secondary');
+                        
+                        setTimeout(() => {
+                            e.currentTarget.innerHTML = originalText;
+                            e.currentTarget.classList.remove('text-secondary');
+                        }, 2000);
+                    });
+                });
+            });
+            
+            // 绘制图表
+            drawCharts(results);
+        }
+
+        // 绘制Tm值和GC含量图表
+        function drawCharts(results) {
+            // Tm值图表
+            const tmCtx = document.getElementById('tm-chart').getContext('2d');
+            new Chart(tmCtx, {
+                type: 'bar',
+                data: {
+                    labels: results.map(r => r.mutation),
+                    datasets: [{
+                        label: '引物Tm值 (°C)',
+                        data: results.map(r => parseFloat(r.tm)),
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: Math.max(40, Math.min(...results.map(r => parseFloat(r.tm))) - 5)
+                        }
+                    }
+                }
+            });
+            
+            // GC含量图表
+            const gcCtx = document.getElementById('gc-chart').getContext('2d');
+            new Chart(gcCtx, {
+                type: 'bar',
+                data: {
+                    labels: results.map(r => r.mutation),
+                    datasets: [{
+                        label: 'GC含量 (%)',
+                        data: results.map(r => r.gc),
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            loadingIndicator.classList.add('hidden');
+            errorMessage.classList.remove('hidden');
+            errorText.textContent = message;
+        }
+
+        // 计算反向互补序列
+        function reverseComplement(seq) {
+            const complement = { 'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C' };
+            return seq.split('').reverse().map(base => complement[base]).join('');
+        }
+
+        // 导出为Excel格式 (CSV) - 修复乱码问题
+        exportExcelBtn.addEventListener('click', () => {
+            const rows = [];
+            // 添加表头（新增备注列）
+            rows.push(['突变位点', '上游引物 (5\'→3\')', '下游引物 (5\'→3\')', '上游Tm (°C)', '上游GC (%)', '备注']);
+            
+            // 添加数据行
+            document.querySelectorAll('#primers-body tr').forEach(row => {
+                const cols = row.querySelectorAll('td');
+                const index = rows.length - 1; // 计算当前行索引
+                const note = document.getElementById(`note-${index}`).value; // 获取备注信息
+                
+                rows.push([
+                    cols[0].textContent.trim(),
+                    cols[1].querySelector('input[type="hidden"]')?.value || cols[1].textContent.trim(),
+                    cols[2].textContent.trim(),
+                    cols[3].textContent.trim(),
+                    cols[4].textContent.trim(),
+                    note // 添加备注信息
+                ]);
+            });
+            
+            // 添加UTF-8 BOM头解决Excel乱码问题
+            const csvContent = "\ufeff" + rows.map(row => {
+                // 处理包含逗号的内容，用双引号包裹
+                return row.map(cell => {
+                    if (cell.includes(',') || cell.includes('"')) {
+                        return `"${cell.replace(/"/g, '""')}"`;
+                    }
+                    return cell;
+                }).join(',');
+            }).join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            
+            // 创建下载链接
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', '突变引物设计结果.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // 导出为FASTA格式
+        exportFastaBtn.addEventListener('click', () => {
+            let fastaContent = '';
+            
+            // 添加数据
+            document.querySelectorAll('#primers-body tr').forEach(row => {
+                const cols = row.querySelectorAll('td');
+                const mutation = cols[0].textContent.trim();
+                const forwardInput = cols[6].querySelector('input[id^="forward-"]');
+                const reverseInput = cols[6].querySelector('input[id^="reverse-"]');
+                const forward = forwardInput.value;
+                const reverse = reverseInput.value;
+                
+                fastaContent += `>Forward_${mutation}\n${forward}\n`;
+                fastaContent += `>Reverse_${mutation}\n${reverse}\n`;
+            });
+            
+            // 生成FASTA内容
+            const blob = new Blob([fastaContent], { type: 'text/fasta;charset=utf-8;' });
+            
+            // 创建下载链接
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', '突变引物设计结果.fasta');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
